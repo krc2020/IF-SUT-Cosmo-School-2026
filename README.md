@@ -38,8 +38,8 @@ shipped M82 frames).
 
 | File | Description |
 |---|---|
-| `Lesson_Blocks1to6_Thai_Spectroscopy.pptx` | 36-slide deck covering Blocks 1–6 of the syllabus |
-| `Syllabus_Spectroscopy_Thailand_Extragalactic.md` | The course syllabus (3-hour breakdown) |
+| `Spectroscopic Capabilities in Thailand.PDF` | presentation slide |
+| `TNO_Cycle14_ABD.DOCX` | Mock TNT proposal for cycle 14 |
 
 ### Jupyter notebooks (run these)
 
