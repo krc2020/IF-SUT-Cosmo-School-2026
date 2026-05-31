@@ -46,7 +46,7 @@ shipped M82 frames).
 | Notebook | What it does | Result on the example data |
 |---|---|---|
 | `01_LRS_ETC_v5.ipynb` | Photon-noise-limited Exposure-Time Calculator. Source spectrum, noise budget, throughput, S/N per pixel, **redshift series for the M82 template (z = 0 – 0.5)**. | Median S/N/pixel for M82 (3 × 600 s) → 1269 |
-| `02_LRS_data_reduction_v4.ipynb` | End-to-end LRS reduction: bias → flat → CR-reject → wavelength calibration (deg=2) → nucleus finder → flux calibration → save. | M82 nucleus at row 150, 7 HgAr lines matched, RMS = 6.8 Å, median S/N/pix = 9.0 |
+| `02_LRS_data_reduction_v4.ipynb` | End-to-end LRS reduction: bias → flat → CR-reject → wavelength calibration (auto-degree, two-brightest-line anchor) → nucleus finder → **continuum tracing** → **trace-following + optimal extraction** → **flux calibration over 4000–8000 Å (reliably calibrated 4626–7996 Å)** → save. | M82 nucleus at row 150, **12 HgAr lines matched, RMS = 0.91 Å**, Hα residual = −0.9 Å, standard trace drift 13 pix across the chip, optimal-vs-aperture S/N gain +11%, **median S/N/pix = 8.5** over the reliably-calibrated band (covers Hβ 4861, [O III] 4959/5007, [N II] + Hα, [S II]) |
 
 Earlier versions (`*_v2`, `*_v3`, `*_v4` for ETC; `*`, `*_v2`, `*_v3` for
 reduction) are kept for reference — open the highest version number for
@@ -61,7 +61,7 @@ reduction notebook run end-to-end:
 example_frames/
 ├── bias/                       5 frames @ 0 s            (runs 167-171)
 ├── flat/                       3 sky-flats @ 20 s        (runs 137-139)
-├── arc/                        1 HgAr arc @ 60 s         (run 148)
+├── arc/                        5 HgAr arcs @ 60 s        (runs 149-153)
 ├── science_M82/                3 frames @ 60 s, PA=0     (runs 26-28)
 ├── standard_BD75d325/          3 frames @ 60 s           (runs 71-73)
 ├── M82_template_3500_9000.txt  M82-like template spectrum used by the ETC
@@ -130,14 +130,31 @@ Seven steps, runtime ~20 s on the example bundle:
 2. **Master flat** — slit-interior normalisation.
 3. **Stack + flat + CR-reject** — science and standard frames.
 4. **Wavelength calibration** — collapses the arc using the *slit interior*
-   (not the bright slit-edge holes), matches against a 20-line NIST HgAr
-   reference list with iterative tolerance shrinking, fits a deg=2
-   polynomial.
+   (not the bright slit-edge holes), and anchors the initial dispersion on
+   the **two brightest detected peaks** (Hg 5460.74 Å and Ar 7635.11 Å),
+   so the dispersion is measured from the data rather than assumed. Lines
+   are then matched against a 15-line NIST HgAr reference list with
+   iterative tolerance shrinking, fits a deg=1/2/3 polynomial (auto-picked
+   by RMS), and sigma-clips at min(5 Å, 2 σ). Result on the example data:
+   **12 lines matched, RMS = 0.91 Å, Hα residual = −0.9 Å**.
 5. **Find the nucleus** by **emission-excess inside the slit interior**.
    The slit's machined edges have two bright "holes" that look like
    point sources but are not; the algorithm masks them and locates the
    M82 nucleus (~row 150) by the Hα-over-continuum excess.
-6. **Extract & flux-calibrate** with the BD+75°325 sensitivity function.
+5b. **Trace the continuum** of both the science object and the
+   spectrophotometric standard. For each binned column, fit an
+   intensity-weighted centroid in a small spatial window around the
+   nucleus row, sigma-clip outliers, and fit a deg=2 polynomial
+   `row_centroid = f(col)`. The standard drifts ~13 rows across the
+   chip from atmospheric differential refraction; the science object's
+   trace is fit independently because it sat at a different airmass /
+   parallactic angle. The mean spatial profile measured here doubles as
+   the optimal-extraction weight in Step 6.
+6. **Extract & flux-calibrate**. Two estimators run side-by-side: a
+   trace-following ±8-row aperture sum, and a Horne (1986) optimal
+   extraction that weights each row by `P/V`. The optimal estimator
+   gains ~+11% in S/N for free. Sensitivity is calibrated against the
+   BD+75°325 CALSPEC reference flux over the full 4000–8000 Å range.
 7. **Save** to `M82_reduced.fits` (binary table: WAVELENGTH, FLUX, ERROR,
    COUNTS).
 
@@ -177,22 +194,36 @@ pip install astroscrappy
 ```
 Master bias: median = 300.0 ADU,  rms = 1.22 ADU
 Slit illuminates rows 42–251  (123 rows)
-Master flat rms (inside slit): 0.269
+Slit interior used for spectral shape: rows 57–236
+Normalised-flat rms inside the slit interior: 0.046
 M82           stacked 3 frames  (flat-fielded, CR-rejected)
 BD+75°325     stacked 3 frames  (flat-fielded, CR-rejected)
-HgAr arc      stacked 1 frame   (no CR)
+HgAr arc      stacked 5 frames  (no CR)
 Total on-source: M82 = 180 s, BD+75°325 = 180 s
 
-Slit interior (used for arc + source finding): rows 62–231
-Arc 1D background MAD: 0.81 ADU,  threshold 3.0
-Detected 59 peaks
-Final wavelength solution: deg = 2, 7 lines matched, RMS = 6.75 Å
-λ range: 3678–7926 Å,  median dispersion: 4.15 Å/pixel
+Slit interior (used for arc + source finding): rows 57–236
+Arc 1D background MAD: 0.40 ADU,  threshold 3.0
+Detected 13 peaks
+Brightest peak at col 388.3  →  Hg 5460.74 Å
+Second-brightest at col 891.0  →  Ar 7635.11 Å
+  ⇒ initial linear dispersion = 4.326 Å/pixel
+Final solution: deg = 3, 12 lines used, RMS = 0.91 Å
+λ range: 3906–8216 Å,  median dispersion: 4.28 Å/pixel
 
-M82 nucleus: row 150  (spatial FWHM of emission excess ≈ 15 pix)
+Hα sanity check (rest 6562.8 Å):
+  Predicted at column 646 → λ = 6561.89 Å (residual -0.91 Å)
+
+M82 nucleus: row 150  (spatial FWHM of emission excess ≈ 4 pix)
 BD+75°325:   row 154
 
-Median S/N per pixel (4900–7800 Å): 9.0
+Standard trace: rms = 0.11 pix, spatial FWHM = 10.0 pix,
+                trace span = 147.98 → 160.53  (13 px drift!)
+M82      trace: rms = 0.72 pix, spatial FWHM = 11.0 pix,
+                trace span = 145.44 → 153.16  ( 8 px drift)
+
+Median S/N before flux cal — aperture: 6.6, optimal: 7.3 (gain: +11%)
+Spectrum well-calibrated over 4626 – 7996 Å (789 pixels)
+Median S/N per pixel: 8.5
 Saved M82_reduced.fits
 ```
 
