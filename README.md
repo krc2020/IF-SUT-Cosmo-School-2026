@@ -16,7 +16,7 @@ hands-on examples of exposure-time calculation and data reduction.
 
 ```bash
 # 1. Clone or download the repository
-git clone https://github.com/<your-user>/IF-SUT_Cosmo_School.git
+git clone https://github.com/krc2020/IF-SUT_Cosmo_School.git
 cd IF-SUT_Cosmo_School
 
 # 2. Install dependencies
